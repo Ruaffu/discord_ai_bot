@@ -34,13 +34,16 @@ public class DiscordBot extends ListenerAdapter {
 
     @PostConstruct
     public void init(){
-        webClient = WebClient.builder()
+        webClient = createWebClient();
+    }
+
+    private WebClient createWebClient() {
+        return WebClient.builder()
                 .baseUrl(url)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openAiApiKey)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
                 .build();
     }
-
     public void startBot() throws Exception {
         JDABuilder.createDefault(botToken)
                 .addEventListeners(this)
@@ -53,11 +56,11 @@ public class DiscordBot extends ListenerAdapter {
 
         if (event.getAuthor().isBot()) return;
 
-        log.info("User : {} asked a question",event.getAuthor().getName());
+        log.debug("User : {} asked a question",event.getAuthor().getName());
 
         String message = event.getMessage().getContentRaw();
 
-        log.info("message: {}",message);
+        log.debug("message: {}",message);
         if (message.contains(event.getJDA().getSelfUser().getAsMention())) {
             String messageContent = event.getMessage().getContentRaw();
 
@@ -103,7 +106,7 @@ public class DiscordBot extends ListenerAdapter {
                                 .get("message").getAsJsonObject()
                                 .get("content").getAsString();
 
-                        log.info("response : {}",content);
+                        log.debug("response : {}",content);
 
                         return content;
                     }).onErrorReturn("An error occurred while generating the response.");
