@@ -17,7 +17,11 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,11 +38,15 @@ public class DiscordBot extends ListenerAdapter {
     @Value("${discordbot.url}")
     private String url;
 
-    private HttpClient httpClient;
+    private WebClient webClient;
 
     @PostConstruct
     public void init(){
-        httpClient = HttpClients.createDefault();
+        webClient = WebClient.builder()
+                .baseUrl(url)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openAiApiKey)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
+                .build();
     }
 
     public void startBot() throws Exception {
@@ -50,13 +58,14 @@ public class DiscordBot extends ListenerAdapter {
 
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
-        String response;
+        Mono<String> response;
 
         if (event.getAuthor().isBot()) return;
 
         log.info("User : {} asked a question",event.getAuthor().getName());
 
         String message = event.getMessage().getContentRaw();
+
         log.info("message: {}",message);
         if (message.contains(event.getJDA().getSelfUser().getAsMention())) {
             String messageContent = event.getMessage().getContentRaw();
@@ -72,44 +81,41 @@ public class DiscordBot extends ListenerAdapter {
 
             // Trim leading and trailing whitespace
             trimmedMessage = trimmedMessage.trim();
-            response = generateChatGPTResponse(trimmedMessage);
-        }else{
-            return;
+
+            generateChatGPTResponse(trimmedMessage)
+                    .subscribe(resp -> {
+                                // Send the response back to the Discord channel
+                                event.getChannel().sendMessage(resp).queue();
+                            },
+                            error -> {
+                                log.error("An error occurred while generating the response.", error);
+                                event.getChannel().sendMessage("An error occurred while generating the response.").queue();
+                            });
         }
 
-        // Send the response back to the Discord channel
-        event.getChannel().sendMessage(response).queue();
     }
 
-    private String generateChatGPTResponse(String message) {
-        try {
+    private Mono<String> generateChatGPTResponse(String message) {
             log.info("Question: {}",message);
-
-            HttpPost httpPost = new HttpPost(url);
-            httpPost.setHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openAiApiKey);
-            httpPost.setHeader(HttpHeaders.CONTENT_TYPE, "application/json");
-
             String requestBody = String.format("{\"model\": \"gpt-3.5-turbo\", \"messages\": [{\"role\": \"user\", \"content\": \" %s\"}]}", message);
-            httpPost.setEntity(new StringEntity(requestBody));
+            return webClient.post()
+                    .body(BodyInserters.fromValue(requestBody))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .map(responseBody -> {
+                        Gson gson = new Gson();
+                        JsonObject responseJson = gson.fromJson(responseBody, JsonObject.class);
 
-            HttpResponse response = httpClient.execute(httpPost);
-            HttpEntity responseEntity = response.getEntity();
-            String responseBody = EntityUtils.toString(responseEntity);
-            Gson gson = new Gson();
-            JsonObject responseJson = gson.fromJson(responseBody, JsonObject.class);
+                        // Extract the "content" value
+                        String content = responseJson.getAsJsonArray("choices")
+                                .get(0).getAsJsonObject()
+                                .get("message").getAsJsonObject()
+                                .get("content").getAsString();
 
-            // Extract the "content" value
-            String content = responseJson.getAsJsonArray("choices")
-                    .get(0).getAsJsonObject()
-                    .get("message").getAsJsonObject()
-                    .get("content").getAsString();
+                        log.info("response : {}",content);
 
-            log.info("response : {}",content);
+                        return content;
+                    }).onErrorReturn("An error occurred while generating the response.");
 
-            return content;
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "An error occurred while generating the response.";
-        }
     }
 }
