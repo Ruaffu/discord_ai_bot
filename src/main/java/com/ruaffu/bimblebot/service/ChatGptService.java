@@ -6,10 +6,13 @@ import org.springframework.beans.factory.annotation.*;
 import org.springframework.stereotype.*;
 import org.springframework.web.reactive.function.client.*;
 
-import com.fasterxml.jackson.databind.*;
+import com.google.gson.*;
+
+import lombok.extern.slf4j.*;
 
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @Service
 public class ChatGptService {
 	private final WebClient webClient;
@@ -21,18 +24,35 @@ public class ChatGptService {
 
 	public Mono<String> sendMessageToChatGPT(String message) {
 		return webClient.post()
-				.uri("/v1/chat/completions")
 				.bodyValue(buildRequestBody(message))
 				.retrieve()
-				.bodyToMono(JsonNode.class)
-				.map(jsonNode -> jsonNode.get("choices").get(0).get("message").asText());
+				.bodyToMono(String.class)
+				.map(responseBody -> {
+					Gson gson = new Gson();
+					JsonObject responseJson = gson.fromJson(responseBody, JsonObject.class);
+
+					// Extract the "content" value
+					String content = responseJson.getAsJsonArray("choices")
+							.get(0).getAsJsonObject()
+							.get("message").getAsJsonObject()
+							.get("content").getAsString();
+
+					log.debug("response : {}", content);
+
+					return content;
+				}).onErrorReturn("An error occurred while generating the response.");
 	}
 
 	private Object buildRequestBody(String message) {
+		List<Map<String, String>> messages = new ArrayList<>();
+		Map<String, String> userMessage = new HashMap<>();
+		userMessage.put("role", "user");
+		userMessage.put("content", message);
+		messages.add(userMessage);
+
 		Map<String, Object> data = new HashMap<>();
-		data.put("model", "gpt-3.5-turbo");  // Specify the model, adjust if necessary
-		data.put("prompt", message);
-		data.put("max_tokens", 150);  // Set max tokens as needed
+		data.put("model", "gpt-4-turbo");  // Specify the model, adjust if necessary
+		data.put("messages", messages);
 
 		return data;
 	}
