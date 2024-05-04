@@ -58,9 +58,10 @@ public class DiscordBot extends ListenerAdapter {
 
 			// Trim leading and trailing whitespace
 			trimmedMessage = trimmedMessage.trim();
-
+			log.debug("trimmed message:{}", trimmedMessage);
 			chatGptService.sendMessageToChatGPT(trimmedMessage)
 					.subscribe(resp -> {
+								log.debug("resp: {}", resp);
 								// Send the response back to the Discord channel
 								event.getChannel().sendMessage(resp).queue();
 							},
