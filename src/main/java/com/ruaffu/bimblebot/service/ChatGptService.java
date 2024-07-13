@@ -51,7 +51,7 @@ public class ChatGptService {
 		messages.add(userMessage);
 
 		Map<String, Object> data = new HashMap<>();
-		data.put("model", "gpt-4-turbo");  // Specify the model, adjust if necessary
+		data.put("model", "gpt-4o");  // Specify the model, adjust if necessary
 		data.put("messages", messages);
 
 		return data;
