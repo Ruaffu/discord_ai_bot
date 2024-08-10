@@ -45,32 +45,36 @@ public class DiscordBot extends ListenerAdapter {
 
 		log.debug("message: {}", message);
 		if (message.contains(event.getJDA().getSelfUser().getAsMention())) {
-			String messageContent = event.getMessage().getContentRaw();
-
-			// Define the regex pattern for matching user/bot mentions
-			Pattern mentionPattern = Pattern.compile("<@!?(\\d+)>");
-
-			// Create a matcher object for the message content
-			Matcher mentionMatcher = mentionPattern.matcher(messageContent);
-
-			// Remove all user/bot mentions from the message content
-			String trimmedMessage = mentionMatcher.replaceAll("");
-
-			// Trim leading and trailing whitespace
-			trimmedMessage = trimmedMessage.trim();
-			log.debug("trimmed message:{}", trimmedMessage);
-			chatGptService.sendMessageToChatGPT(trimmedMessage)
-					.subscribe(resp -> {
-								log.debug("resp: {}", resp);
-								// Send the response back to the Discord channel
-								event.getChannel().sendMessage(resp).queue();
-							},
-							error -> {
-								log.error("An error occurred while generating the response.", error);
-								event.getChannel().sendMessage("An error occurred while generating the response.").queue();
-							});
+			sendToGpt(event);
 		}
+		//TODO: expand functionality so that its not just a chatgpt bot.
+	}
 
+	private void sendToGpt(MessageReceivedEvent event) {
+		String messageContent = event.getMessage().getContentRaw();
+		// Define the regex pattern for matching user/bot mentions
+		Pattern mentionPattern = Pattern.compile("<@!?(\\d+)>");
+
+		// Create a matcher object for the message content
+		Matcher mentionMatcher = mentionPattern.matcher(messageContent);
+
+		// Remove all user/bot mentions from the message content
+		String trimmedMessage = mentionMatcher.replaceAll("");
+
+		// Trim leading and trailing whitespace
+		trimmedMessage = trimmedMessage.trim();
+		log.debug("trimmed message:{}", trimmedMessage);
+
+		chatGptService.sendMessageToChatGPT(trimmedMessage)
+				.subscribe(resp -> {
+							log.debug("resp: {}", resp);
+							// Send the response back to the Discord channel
+							event.getChannel().sendMessage(resp).queue();
+						},
+						error -> {
+							log.error("An error occurred while generating the response.", error);
+							event.getChannel().sendMessage("An error occurred while generating the response.").queue();
+						});
 	}
 
 }
